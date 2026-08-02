@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#0b0d12">
+<title>Tools on Web</title>
+<meta name="description" content="브라우저에서 바로 쓰는 단일 HTML 도구 모음">
+<style>
+  :root {
+    --bg: #f4f5f7;
+    --card: #ffffff;
+    --fg: #14161a;
+    --muted: #6b7280;
+    --line: #e3e5ea;
+    --accent: #2f5bff;
+    --accent-fg: #ffffff;
+    --accent-soft: rgba(47, 91, 255, .1);
+    --shadow: 0 1px 2px rgba(0,0,0,.05), 0 12px 32px rgba(0,0,0,.08);
+    --shadow-hover: 0 2px 4px rgba(0,0,0,.06), 0 18px 44px rgba(0,0,0,.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b0d12;
+      --card: #151922;
+      --fg: #eef1f6;
+      --muted: #97a0b0;
+      --line: #262c38;
+      --accent: #6b8cff;
+      --accent-fg: #0b0d12;
+      --accent-soft: rgba(107, 140, 255, .14);
+      --shadow: 0 1px 2px rgba(0,0,0,.4), 0 16px 40px rgba(0,0,0,.5);
+      --shadow-hover: 0 2px 6px rgba(0,0,0,.5), 0 22px 52px rgba(0,0,0,.6);
+    }
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", "Pretendard",
+                 "Noto Sans KR", "Segoe UI", Roboto, sans-serif;
+    -webkit-text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+    display: flex;
+    justify-content: center;
+    padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom));
+  }
+
+  main {
+    width: 100%;
+    max-width: 720px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  header { text-align: center; padding: 8px 0 2px; }
+  h1 { margin: 0; font-size: 1.3rem; font-weight: 650; letter-spacing: -.02em; }
+  header p { margin: 6px 0 0; font-size: .85rem; color: var(--muted); }
+
+  .search {
+    position: relative;
+  }
+  .search input {
+    appearance: none;
+    width: 100%;
+    font: inherit;
+    font-size: .95rem;
+    min-height: 50px;
+    padding: 0 16px 0 42px;
+    color: var(--fg);
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    outline: none;
+  }
+  .search input:focus-visible {
+    border-color: var(--accent);
+    box-shadow: var(--shadow), 0 0 0 3px var(--accent-soft);
+  }
+  .search svg {
+    position: absolute;
+    left: 14px; top: 50%;
+    transform: translateY(-50%);
+    width: 18px; height: 18px;
+    color: var(--muted);
+    pointer-events: none;
+  }
+
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+    gap: 12px;
+  }
+
+  .tool {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 16px;
+    text-decoration: none;
+    color: inherit;
+    transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease;
+  }
+  .tool:hover, .tool:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-hover);
+    border-color: var(--accent);
+    outline: none;
+  }
+  .tool:active { transform: translateY(0); }
+
+  .icon {
+    flex: none;
+    width: 40px; height: 40px;
+    display: grid;
+    place-items: center;
+    font-size: 1.15rem;
+    border-radius: 12px;
+    background: var(--accent-soft);
+  }
+
+  .tool h2 { margin: 0; font-size: .95rem; font-weight: 650; letter-spacing: -.01em; }
+  .tool p { margin: 4px 0 0; font-size: .8rem; line-height: 1.45; color: var(--muted); }
+
+  .tags { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .tag {
+    font-size: .68rem;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 2px 8px;
+  }
+
+  .empty {
+    display: none;
+    text-align: center;
+    font-size: .85rem;
+    color: var(--muted);
+    padding: 32px 0;
+  }
+  .empty.show { display: block; }
+
+  footer {
+    text-align: center;
+    font-size: .72rem;
+    color: var(--muted);
+    padding: 4px 0 0;
+  }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Tools on Web</h1>
+    <p>브라우저에서 사용 가능한 도구 모음</p>
+  </header>
+
+  <div class="search">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+         stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <circle cx="11" cy="11" r="7"></circle><path d="m20 20-3.5-3.5"></path>
+    </svg>
+    <input id="q" type="search" placeholder="도구 검색" autocomplete="off"
+           aria-label="도구 검색" enterkeyhint="search">
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <p class="empty" id="empty">검색 결과가 없습니다</p>
+</main>
+
+<script>
+  // 새 도구를 추가할 때는 아래 배열에 항목 하나만 추가하면 됩니다.
+  const TOOLS = [
+    {
+      href: "qr_generator.html",
+      icon: "🔳",
+      title: "UUID4 QR 생성기",
+      desc: "랜덤 UUID v4를 QR 코드로 만들고 PNG로 저장합니다.",
+      tags: ["QR", "UUID", "오프라인"]
+    }
+  ];
+
+  const grid = document.getElementById("grid");
+  const empty = document.getElementById("empty");
+  const q = document.getElementById("q");
+
+  function render(keyword = "") {
+    const k = keyword.trim().toLowerCase();
+    const items = TOOLS.filter(t =>
+      !k || [t.title, t.desc, ...(t.tags || [])].join(" ").toLowerCase().includes(k)
+    );
+
+    grid.textContent = "";
+    for (const t of items) {
+      const a = document.createElement("a");
+      a.className = "tool";
+      a.href = t.href;
+
+      const icon = document.createElement("div");
+      icon.className = "icon";
+      icon.setAttribute("aria-hidden", "true");
+      icon.textContent = t.icon || "🛠";
+
+      const body = document.createElement("div");
+
+      const h2 = document.createElement("h2");
+      h2.textContent = t.title;
+      body.appendChild(h2);
+
+      const p = document.createElement("p");
+      p.textContent = t.desc;
+      body.appendChild(p);
+
+      if (t.tags && t.tags.length) {
+        const tags = document.createElement("div");
+        tags.className = "tags";
+        for (const name of t.tags) {
+          const span = document.createElement("span");
+          span.className = "tag";
+          span.textContent = name;
+          tags.appendChild(span);
+        }
+        body.appendChild(tags);
+      }
+
+      a.append(icon, body);
+      grid.appendChild(a);
+    }
+
+    empty.classList.toggle("show", items.length === 0);
+  }
+
+  q.addEventListener("input", () => render(q.value));
+  render();
+</script>
+</body>
+</html>
