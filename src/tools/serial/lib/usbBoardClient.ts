@@ -1,9 +1,12 @@
 import {
+  type BoardCapabilities,
   type BoardClient,
   type BoardStatus,
-  type LogSubscriber,
+  type ByteSubscriber,
   type MapEntry,
+  type UartConfig,
   type WifiCred,
+  TransportUnsupportedError,
 } from './boardClient'
 
 // Mirrors enum in board_serial_tester/main/control_proto.h. Keep in sync.
@@ -38,10 +41,13 @@ export type UsbBoardClientOptions = {
   // set to this value so Chromium will deliver the transfer (otherwise macOS
   // rejects recipient=device transfers even for vendor-class devices).
   interfaceNumber: number
-  // Bulk-IN endpoint to read live log lines from. If null, log streaming is
-  // disabled and getLogSnapshot()/subscribeLog() will simply return empty.
-  logEndpoint?: number | null
-  logPacketSize?: number
+  // Vendor bulk byte pipe (usb_iface.c). IN carries whatever the board pushed
+  // with usb_iface_write(); OUT delivers our bytes to the board, which logs
+  // them as USB_IN. These are raw bytes — NOT the log bus, which the firmware
+  // only exposes over HTTP/WebSocket.
+  pipeInEndpoint?: number | null
+  pipeOutEndpoint?: number | null
+  pipePacketSize?: number
 }
 
 function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
@@ -52,22 +58,31 @@ function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
 
 export class UsbBoardClient implements BoardClient {
   readonly transport = 'usb' as const
+  readonly capabilities: BoardCapabilities
   private readonly device: USBDevice
   private readonly interfaceNumber: number
-  private readonly logEndpoint: number | null
-  private readonly logPacketSize: number
+  private readonly pipeInEndpoint: number | null
+  private readonly pipeOutEndpoint: number | null
+  private readonly pipePacketSize: number
 
-  private subscribers = new Set<LogSubscriber>()
+  private byteSubscribers = new Set<ByteSubscriber>()
   private readToken: { stop: boolean } | null = null
-  private logTail = ''
-  private historyLines: string[] = []
-  private readonly historyCap = 1024
 
   constructor(opts: UsbBoardClientOptions) {
     this.device = opts.device
     this.interfaceNumber = opts.interfaceNumber
-    this.logEndpoint = opts.logEndpoint ?? null
-    this.logPacketSize = opts.logPacketSize ?? 64
+    this.pipeInEndpoint = opts.pipeInEndpoint ?? null
+    this.pipeOutEndpoint = opts.pipeOutEndpoint ?? null
+    this.pipePacketSize = opts.pipePacketSize ?? 64
+    this.capabilities = {
+      // control_proto.h has no request for the log bus, the UART or OTA — those
+      // live on the HTTP server only.
+      log: false,
+      byteStream: this.pipeInEndpoint !== null || this.pipeOutEndpoint !== null,
+      usbPipe: this.pipeOutEndpoint !== null,
+      uart: false,
+      ota: false,
+    }
   }
 
   // ---------- raw control transfer helpers ----------
@@ -296,28 +311,68 @@ export class UsbBoardClient implements BoardClient {
     await this.controlOut(CTRL.REBOOT, 0, 0)
   }
 
-  async getLogSnapshot(): Promise<string> {
-    return this.historyLines.join('')
+  // ---------- byte pipes ----------
+
+  async usbTx(data: Uint8Array): Promise<void> {
+    if (data.byteLength === 0) return
+    if (this.pipeOutEndpoint === null) {
+      throw new Error('bulk OUT 엔드포인트가 없습니다.')
+    }
+    const buffer = new ArrayBuffer(data.byteLength)
+    new Uint8Array(buffer).set(data)
+    const result = await this.device.transferOut(this.pipeOutEndpoint, buffer)
+    if (result.status !== 'ok') {
+      throw new Error(`bulk OUT ${result.status}`)
+    }
+    // The board logs this as USB_IN, but that log is unreachable over USB, so
+    // report it ourselves to keep the UI's two directions symmetric.
+    this.emitBytes({ pipe: 'usb', dir: 'in', data: data.slice(), tMs: null })
   }
 
-  subscribeLog(cb: LogSubscriber): () => void {
-    this.subscribers.add(cb)
-    if (this.logEndpoint !== null) {
-      this.ensureReadLoop()
-    }
+  async uartTx(): Promise<void> {
+    throw new TransportUnsupportedError('UART 전송', this.transport)
+  }
+
+  async getUartConfig(): Promise<UartConfig> {
+    throw new TransportUnsupportedError('UART 설정 조회', this.transport)
+  }
+
+  async setUartConfig(): Promise<UartConfig> {
+    throw new TransportUnsupportedError('UART 설정 변경', this.transport)
+  }
+
+  async otaUpload(): Promise<void> {
+    throw new TransportUnsupportedError('OTA 업로드', this.transport)
+  }
+
+  private emitBytes(ev: Parameters<ByteSubscriber>[0]): void {
+    for (const cb of this.byteSubscribers) cb(ev)
+  }
+
+  subscribeBytes(cb: ByteSubscriber): () => void {
+    this.byteSubscribers.add(cb)
+    this.ensureReadLoop()
     return () => {
-      this.subscribers.delete(cb)
+      this.byteSubscribers.delete(cb)
     }
+  }
+
+  // The log bus is HTTP-only, so these stay empty rather than pretending.
+  async getLogSnapshot(): Promise<string> {
+    return ''
+  }
+
+  subscribeLog(): () => void {
+    return () => {}
   }
 
   private ensureReadLoop(): void {
     if (this.readToken) return
-    if (this.logEndpoint === null) return
-    const ep = this.logEndpoint
-    const pkt = this.logPacketSize
+    if (this.pipeInEndpoint === null) return
+    const ep = this.pipeInEndpoint
+    const pkt = this.pipePacketSize
     const token = { stop: false }
     this.readToken = token
-    const decoder = new TextDecoder('utf-8', { fatal: false })
     void (async () => {
       while (!token.stop) {
         try {
@@ -329,16 +384,13 @@ export class UsbBoardClient implements BoardClient {
             }
             continue
           }
-          const text = decoder.decode(result.data, { stream: true })
-          this.logTail += text
-          let nl: number
-          while ((nl = this.logTail.indexOf('\n')) >= 0) {
-            const line = this.logTail.slice(0, nl + 1)
-            this.logTail = this.logTail.slice(nl + 1)
-            this.historyLines.push(line)
-            if (this.historyLines.length > this.historyCap) this.historyLines.shift()
-            for (const cb of this.subscribers) cb(line)
-          }
+          const bytes = new Uint8Array(
+            result.data.buffer.slice(
+              result.data.byteOffset,
+              result.data.byteOffset + result.data.byteLength,
+            ),
+          )
+          this.emitBytes({ pipe: 'usb', dir: 'out', data: bytes, tMs: null })
         } catch {
           if (!token.stop) await new Promise((r) => setTimeout(r, 250))
         }
@@ -351,7 +403,7 @@ export class UsbBoardClient implements BoardClient {
       this.readToken.stop = true
       this.readToken = null
     }
-    this.subscribers.clear()
+    this.byteSubscribers.clear()
   }
 }
 

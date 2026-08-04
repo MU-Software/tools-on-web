@@ -25,17 +25,23 @@ export type UseBoardClient = {
 
 const DEFAULT_HTTP_BASE = 'http://esp32-bst.local'
 
-// Picks a usable bulk-IN endpoint (for live log streaming) on the given alt
-// setting. Vendor-only firmware has one interface with bulk IN+OUT.
-function pickBulkInEndpoint(alt: USBAlternateInterface):
-  | { endpointNumber: number; packetSize: number }
-  | null {
+// Picks the vendor bulk byte pipe on the given alt setting. The vendor-only
+// firmware exposes exactly one bulk IN + one bulk OUT (usb_iface.c).
+function pickBulkPipe(alt: USBAlternateInterface): {
+  inEndpoint: number | null
+  outEndpoint: number | null
+  packetSize: number
+} {
+  let inEndpoint: number | null = null
+  let outEndpoint: number | null = null
+  let packetSize = 64
   for (const ep of alt.endpoints) {
-    if (ep.type === 'bulk' && ep.direction === 'in') {
-      return { endpointNumber: ep.endpointNumber, packetSize: ep.packetSize || 64 }
-    }
+    if (ep.type !== 'bulk') continue
+    if (ep.direction === 'in' && inEndpoint === null) inEndpoint = ep.endpointNumber
+    if (ep.direction === 'out' && outEndpoint === null) outEndpoint = ep.endpointNumber
+    if (ep.packetSize) packetSize = ep.packetSize
   }
-  return null
+  return { inEndpoint, outEndpoint, packetSize }
 }
 
 export function useBoardClient(): UseBoardClient {
@@ -119,12 +125,13 @@ export function useBoardClient(): UseBoardClient {
         const alt = cfg.interfaces
           .find((i) => i.interfaceNumber === claimed.interfaceNumber)
           ?.alternates.find((a) => a.alternateSetting === claimed.alternate)
-        const bulkIn = alt ? pickBulkInEndpoint(alt) : null
+        const pipe = alt ? pickBulkPipe(alt) : null
         const c = new UsbBoardClient({
           device,
           interfaceNumber: claimed.interfaceNumber,
-          logEndpoint: bulkIn?.endpointNumber ?? null,
-          logPacketSize: bulkIn?.packetSize ?? 64,
+          pipeInEndpoint: pipe?.inEndpoint ?? null,
+          pipeOutEndpoint: pipe?.outEndpoint ?? null,
+          pipePacketSize: pipe?.packetSize ?? 64,
         })
         await c.getStatus()  // probe
         setClient(c)

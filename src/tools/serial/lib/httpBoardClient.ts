@@ -1,12 +1,23 @@
 import {
+  type BoardCapabilities,
   type BoardClient,
   type BoardStatus,
+  type ByteSubscriber,
   type LogSubscriber,
   type MapEntry,
+  type UartConfig,
   type WifiCred,
   bytesToHex,
   hexToBytes,
+  parseByteLogLine,
 } from './boardClient'
+
+type RawUartConfig = {
+  baud: number
+  data_bits: number
+  parity: string
+  stop_bits: number
+}
 
 type RawStatus = {
   boot_id: number
@@ -16,6 +27,24 @@ type RawStatus = {
   log_all: boolean
   wifi_connected: boolean
   wifi_ap: boolean
+  usb?: { mounted: boolean; rx_bytes: number; tx_bytes: number; rx_dropped: number }
+  uart?: RawUartConfig & { rx_bytes: number; tx_bytes: number }
+}
+
+function toUartConfig(r: RawUartConfig): UartConfig {
+  const p = (r.parity ?? 'N').toUpperCase()
+  return {
+    baud: r.baud,
+    dataBits: r.data_bits,
+    parity: p === 'E' || p === 'O' ? p : 'N',
+    stopBits: r.stop_bits,
+  }
+}
+
+function toArrayBuffer(bytes: Uint8Array): ArrayBuffer {
+  const buf = new ArrayBuffer(bytes.byteLength)
+  new Uint8Array(buf).set(bytes)
+  return buf
 }
 
 export type HttpBoardClientOptions = {
@@ -26,8 +55,17 @@ export type HttpBoardClientOptions = {
 
 export class HttpBoardClient implements BoardClient {
   readonly transport = 'http' as const
+  // HTTP reaches every firmware surface.
+  readonly capabilities: BoardCapabilities = {
+    log: true,
+    byteStream: true,
+    usbPipe: true,
+    uart: true,
+    ota: true,
+  }
   private readonly baseUrl: string
   private subscribers = new Set<LogSubscriber>()
+  private byteSubscribers = new Set<ByteSubscriber>()
   private ws: WebSocket | null = null
   private wsClosed = false
 
@@ -65,6 +103,17 @@ export class HttpBoardClient implements BoardClient {
       logAll: j.log_all,
       wifiConnected: j.wifi_connected,
       wifiAp: j.wifi_ap,
+      usb: j.usb && {
+        mounted: j.usb.mounted,
+        rxBytes: j.usb.rx_bytes,
+        txBytes: j.usb.tx_bytes,
+        rxDropped: j.usb.rx_dropped,
+      },
+      uart: j.uart && {
+        ...toUartConfig(j.uart),
+        rxBytes: j.uart.rx_bytes,
+        txBytes: j.uart.tx_bytes,
+      },
     }
   }
 
@@ -137,6 +186,79 @@ export class HttpBoardClient implements BoardClient {
     await this.request('/api/reboot', { method: 'POST' })
   }
 
+  // ---------- byte pipes ----------
+
+  // The firmware accepts TX over the log WebSocket as well as REST, and prefers
+  // it for live UIs (no CORS preflight per send). Use the socket when it is
+  // already open; otherwise POST, which also gives us a real error to show.
+  //
+  // Both paths are size-capped on the device — WS_RX_MAX 4096 per frame (and
+  // hex doubles the payload) and TX_MAX_BODY 8 KB per request. An oversized WS
+  // frame is dropped without a reply, so chunk here rather than lose bytes.
+  private async tx(target: 'usb' | 'uart', data: Uint8Array): Promise<void> {
+    if (data.byteLength === 0) return
+    const viaWs = this.ws !== null && this.ws.readyState === WebSocket.OPEN
+    const chunkSize = viaWs ? 1024 : 4096
+    for (let off = 0; off < data.byteLength; off += chunkSize) {
+      const chunk = data.subarray(off, Math.min(off + chunkSize, data.byteLength))
+      if (viaWs && this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ target, hex: bytesToHex(chunk) }))
+        continue
+      }
+      await this.request(`/api/${target}/tx`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: toArrayBuffer(chunk),
+      })
+    }
+  }
+
+  async usbTx(data: Uint8Array): Promise<void> {
+    await this.tx('usb', data)
+  }
+
+  async uartTx(data: Uint8Array): Promise<void> {
+    await this.tx('uart', data)
+  }
+
+  async getUartConfig(): Promise<UartConfig> {
+    const res = await this.request('/api/uart/config')
+    return toUartConfig((await res.json()) as RawUartConfig)
+  }
+
+  async setUartConfig(cfg: UartConfig): Promise<UartConfig> {
+    const res = await this.request('/api/uart/config', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        baud: cfg.baud,
+        data_bits: cfg.dataBits,
+        parity: cfg.parity,
+        stop_bits: cfg.stopBits,
+      }),
+    })
+    return toUartConfig((await res.json()) as RawUartConfig)
+  }
+
+  subscribeBytes(cb: ByteSubscriber): () => void {
+    this.byteSubscribers.add(cb)
+    this.ensureWs()
+    return () => {
+      this.byteSubscribers.delete(cb)
+      this.maybeCloseWs()
+    }
+  }
+
+  async otaUpload(image: Uint8Array, sha256Hex?: string): Promise<void> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/octet-stream' }
+    if (sha256Hex) headers['X-Firmware-SHA256'] = sha256Hex
+    await this.request('/api/ota', {
+      method: 'POST',
+      headers,
+      body: toArrayBuffer(image),
+    })
+  }
+
   async getLogSnapshot(): Promise<string> {
     const res = await this.request('/api/log')
     return res.text()
@@ -147,8 +269,12 @@ export class HttpBoardClient implements BoardClient {
     this.ensureWs()
     return () => {
       this.subscribers.delete(cb)
-      if (this.subscribers.size === 0) this.closeWs()
+      this.maybeCloseWs()
     }
+  }
+
+  private maybeCloseWs(): void {
+    if (this.subscribers.size === 0 && this.byteSubscribers.size === 0) this.closeWs()
   }
 
   private ensureWs(): void {
@@ -169,6 +295,14 @@ export class HttpBoardClient implements BoardClient {
         const text = typeof ev.data === 'string' ? ev.data : ''
         if (!text) return
         for (const cb of this.subscribers) cb(text)
+        if (this.byteSubscribers.size === 0) return
+        // A frame is normally one log line, but split defensively.
+        for (const line of text.split('\n')) {
+          if (!line) continue
+          const ev2 = parseByteLogLine(line)
+          if (!ev2) continue
+          for (const cb of this.byteSubscribers) cb(ev2)
+        }
       }
       ws.onclose = () => {
         this.ws = null
@@ -195,6 +329,7 @@ export class HttpBoardClient implements BoardClient {
   async dispose(): Promise<void> {
     this.wsClosed = true
     this.subscribers.clear()
+    this.byteSubscribers.clear()
     this.closeWs()
   }
 }

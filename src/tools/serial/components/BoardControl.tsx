@@ -35,6 +35,8 @@ import {
   utf8ToBytes,
 } from '../lib/boardClient'
 import { useBoardClient } from '../hooks/useBoardClient'
+import { BytePipePanel } from './BytePipePanel'
+import { OtaPanel } from './OtaPanel'
 
 export function BoardControl() {
   const board = useBoardClient()
@@ -48,10 +50,31 @@ export function BoardControl() {
       {board.client && (
         <>
           <StatusPanel client={board.client} />
+          <BytePipePanel
+            client={board.client}
+            pipe="usb"
+            capable={board.client.capabilities.usbPipe}
+            reason={
+              board.client.capabilities.usbPipe
+                ? undefined
+                : 'bulk OUT 엔드포인트를 찾지 못해 전송할 수 없습니다.'
+            }
+          />
+          <BytePipePanel
+            client={board.client}
+            pipe="uart"
+            capable={board.client.capabilities.uart}
+            reason={
+              board.client.capabilities.uart
+                ? undefined
+                : 'UART는 펌웨어의 HTTP 서버로만 열려 있습니다 (control_proto.h에 해당 요청 없음). HTTP로 연결하면 사용할 수 있습니다.'
+            }
+          />
           <StringPanel client={board.client} />
           <MapPanel client={board.client} />
           <WifiPanel client={board.client} />
           <ActionsPanel client={board.client} />
+          <OtaPanel client={board.client} capable={board.client.capabilities.ota} />
           <LogPanel client={board.client} />
         </>
       )}
@@ -217,6 +240,12 @@ function StatusPanel({ client }: { client: BoardClient }) {
           </Button>
         </Stack>
         {err && <Alert severity="error">{err}</Alert>}
+        {client.transport === 'usb' && (
+          <Alert severity="info">
+            USB 전송에서는 로그 스트림·UART·OTA를 쓸 수 없습니다 — 펌웨어가 그 기능들을 HTTP
+            서버로만 노출합니다.
+          </Alert>
+        )}
         {status && (
           <Box
             sx={{
@@ -239,6 +268,28 @@ function StatusPanel({ client }: { client: BoardClient }) {
             <V>{status.wifiConnected ? '연결됨' : '미연결'}</V>
             <T>wifi AP</T>
             <V>{status.wifiAp ? '활성' : '비활성'}</V>
+            {status.usb && (
+              <>
+                <T>usb pipe</T>
+                <V>
+                  {status.usb.mounted ? 'mounted' : 'unmounted'} · rx{' '}
+                  {status.usb.rxBytes.toLocaleString()} · tx{' '}
+                  {status.usb.txBytes.toLocaleString()}
+                  {status.usb.rxDropped > 0 && ` · dropped ${status.usb.rxDropped}`}
+                </V>
+              </>
+            )}
+            {status.uart && (
+              <>
+                <T>uart</T>
+                <V>
+                  {status.uart.baud} {status.uart.dataBits}
+                  {status.uart.parity}
+                  {status.uart.stopBits} · rx {status.uart.rxBytes.toLocaleString()} · tx{' '}
+                  {status.uart.txBytes.toLocaleString()}
+                </V>
+              </>
+            )}
             <T>log_all</T>
             <V>
               <Stack direction="row" spacing={1} sx={{ alignItems: 'center' }}>
@@ -689,6 +740,7 @@ function ActionsPanel({ client }: { client: BoardClient }) {
 // ---------- Live log ----------
 
 function LogPanel({ client }: { client: BoardClient }) {
+  const supported = client.capabilities.log
   const [text, setText] = useState('')
   const [autoScroll, setAutoScroll] = useState(true)
   const ref = useRef<HTMLPreElement | null>(null)
@@ -698,6 +750,7 @@ function LogPanel({ client }: { client: BoardClient }) {
   // Refresh the rendered log periodically; appending to React state on every
   // line would re-render too aggressively under heavy log volume.
   useEffect(() => {
+    if (!supported) return
     let pending = false
     const onLine = (line: string) => {
       linesRef.current.push(line)
@@ -723,7 +776,7 @@ function LogPanel({ client }: { client: BoardClient }) {
       }
     })
     return () => off()
-  }, [client])
+  }, [client, supported])
 
   useEffect(() => {
     if (autoScroll && ref.current) {
@@ -732,11 +785,8 @@ function LogPanel({ client }: { client: BoardClient }) {
   }, [text, autoScroll])
 
   const transportLabel = useMemo(
-    () =>
-      client.transport === 'http'
-        ? 'WebSocket /ws/log'
-        : 'CDC bulk-IN (USB)',
-    [client.transport],
+    () => (supported ? 'WebSocket /ws/log' : '이 전송으로는 불가'),
+    [supported],
   )
 
   return (
