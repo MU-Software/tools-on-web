@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { BoardClient, Transport } from '../lib/boardClient'
 import { HttpBoardClient } from '../lib/httpBoardClient'
 import { UsbBoardClient } from '../lib/usbBoardClient'
+import { claimFirstUsableInterface } from '../lib/usbInterface'
 
 export type ConnState = 'idle' | 'connecting' | 'connected' | 'error'
 
@@ -111,15 +112,17 @@ export function useBoardClient(): UseBoardClient {
         if (!cfg || cfg.interfaces.length === 0) {
           throw new Error('USB 디바이스에 사용 가능한 인터페이스가 없습니다.')
         }
-        const iface = cfg.interfaces[0]
-        await device.claimInterface(iface.interfaceNumber)
-        claimedRef.current = { device, iface: iface.interfaceNumber }
+        // 인터페이스 0을 무조건 잡으면 CDC 복합 장치에서 OS 드라이버와 충돌한다.
+        const claimed = await claimFirstUsableInterface(device)
+        claimedRef.current = { device, iface: claimed.interfaceNumber }
 
-        const alt = iface.alternates[0]
+        const alt = cfg.interfaces
+          .find((i) => i.interfaceNumber === claimed.interfaceNumber)
+          ?.alternates.find((a) => a.alternateSetting === claimed.alternate)
         const bulkIn = alt ? pickBulkInEndpoint(alt) : null
         const c = new UsbBoardClient({
           device,
-          interfaceNumber: iface.interfaceNumber,
+          interfaceNumber: claimed.interfaceNumber,
           logEndpoint: bulkIn?.endpointNumber ?? null,
           logPacketSize: bulkIn?.packetSize ?? 64,
         })

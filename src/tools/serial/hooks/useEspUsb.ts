@@ -1,14 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { claimFirstUsableInterface } from '../lib/usbInterface'
+import type { UsbEndpoints } from '../lib/usbInterface'
+
+export type { UsbEndpoints }
 
 export type UsbStatus = 'idle' | 'requesting' | 'opening' | 'open' | 'closing' | 'error'
-
-export type UsbEndpoints = {
-  interfaceNumber: number
-  alternate: number
-  inEndpoint: number | null
-  outEndpoint: number | null
-  packetSize: number
-}
 
 export type UseEspUsb = {
   status: UsbStatus
@@ -20,34 +16,6 @@ export type UseEspUsb = {
   close: () => Promise<void>
   send: (data: Uint8Array | string) => Promise<void>
   clearLog: () => void
-}
-
-function pickInterface(device: USBDevice): UsbEndpoints | null {
-  const config = device.configuration
-  if (!config) return null
-  for (const iface of config.interfaces) {
-    for (const alt of iface.alternates) {
-      let inEp: number | null = null
-      let outEp: number | null = null
-      let pkt = 64
-      for (const ep of alt.endpoints) {
-        if (ep.type !== 'bulk' && ep.type !== 'interrupt') continue
-        if (ep.direction === 'in' && inEp === null) inEp = ep.endpointNumber
-        if (ep.direction === 'out' && outEp === null) outEp = ep.endpointNumber
-        if (ep.packetSize) pkt = ep.packetSize
-      }
-      if (inEp !== null || outEp !== null) {
-        return {
-          interfaceNumber: iface.interfaceNumber,
-          alternate: alt.alternateSetting,
-          inEndpoint: inEp,
-          outEndpoint: outEp,
-          packetSize: pkt,
-        }
-      }
-    }
-  }
-  return null
 }
 
 function toBytes(input: Uint8Array | string): Uint8Array {
@@ -140,12 +108,9 @@ export function useEspUsb(): UseEspUsb {
     try {
       await device.open()
       if (device.configuration === null) await device.selectConfiguration(1)
-      const ep = pickInterface(device)
-      if (!ep) throw new Error('사용 가능한 bulk/interrupt 엔드포인트를 찾지 못했습니다.')
-      await device.claimInterface(ep.interfaceNumber)
-      if (ep.alternate !== 0) {
-        await device.selectAlternateInterface(ep.interfaceNumber, ep.alternate)
-      }
+      const ep = await claimFirstUsableInterface(device, ({ interfaceNumber, error }) => {
+        append(`interface ${interfaceNumber} claim 실패 (OS 드라이버 점유 가능성): ${error.message}`)
+      })
       setEndpoints(ep)
       setStatus('open')
       append(
