@@ -38,4 +38,12 @@ export const TOOLS: Tool[] = [
     // esptool-js를 끌고 오므로 lazy 유지
     component: lazy(() => import('./serial/SerialTester')),
   },
+  {
+    path: '/ruler',
+    icon: '📏',
+    title: '화면 자',
+    desc: '장치를 추정해 화면 밀도를 잡고, 실제 크기의 자를 가로·세로·대각선으로 그립니다.',
+    tags: ['자', 'DPI', 'PPI', '길이', '보정', '측정'],
+    component: lazy(() => import('./ruler/ScreenRuler')),
+  },
 ]

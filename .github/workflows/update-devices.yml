@@ -1,0 +1,67 @@
+name: Update device DB
+
+# 화면 자 도구의 장치 DB는 빌드와 무관하게, 분기마다 한 번만 갱신합니다.
+on:
+  schedule:
+    # 1·4·7·10월 1일 00:00 UTC (09:00 KST)
+    - cron: '0 0 1 1,4,7,10 *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: update-devices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # 자료가 수상하면(출처 구조 변경 등) 스크립트가 파일을 쓰지 않고 실패한다
+      - name: 공개 자료에서 장치 DB 다시 생성
+        run: pnpm devices:update
+
+      - name: 바뀐 내용이 있는지 확인
+        id: diff
+        run: |
+          if git diff --quiet -- src/tools/ruler/devices.generated.ts; then
+            echo 'changed=false' >> "$GITHUB_OUTPUT"
+            echo '· 바뀐 기기가 없습니다.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'changed=true' >> "$GITHUB_OUTPUT"
+            git diff --stat -- src/tools/ruler/devices.generated.ts >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # 새 자료가 타입·빌드를 깨지 않는지 확인한 뒤에만 커밋한다
+      - name: 빌드 확인
+        if: steps.diff.outputs.changed == 'true'
+        run: pnpm build
+
+      - name: 커밋
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add src/tools/ruler/devices.generated.ts
+          git commit -m "chore: 장치 DB 갱신 ($(date -u +%Y-%m-%d))"
+          git push
+
+      # GITHUB_TOKEN이 만든 커밋은 다른 워크플로를 깨우지 않으므로 배포를 직접 부른다
+      - name: 배포 워크플로 실행
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run deploy.yml

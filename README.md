@@ -47,6 +47,58 @@ esptool-js 때문에 180KB가 넘으므로 반드시 필요합니다.
 
 ## 도구별 참고사항
 
+### 화면 자 (`/ruler`)
+
+브라우저는 실제 화면 밀도(PPI)를 알려주지 않습니다. CSS는 1px을 명목상 1/96인치로 정의할 뿐이고
+`devicePixelRatio`는 배율일 뿐이라, 자를 실물 크기로 그리려면 **장치 추정**과 **사용자 보정**이
+필요합니다. 도구는 다음 순서로 값을 정합니다.
+
+1. UA Client Hints 모델명(`SM-S928B` 등) → 수록된 PPI
+2. 논리 해상도 + 배율 → 수록된 기기
+3. 플랫폼별 계열값(iPhone Retina, 안드로이드 신고 밀도, 윈도우·리눅스 배율 등)
+   - 배율이 1보다 크면 해상도 표를 쓰지 않습니다. 15.6형 FHD 노트북을 125%로 쓰면 실제 픽셀이
+     24형 모니터와 똑같은 1920×1080이라 크기를 구분할 수 없기 때문입니다. 대신 OS가 패널 밀도를
+     보고 정한 배율 자체를 단서로 삼습니다(`108 × 배율`, 오차 ±5% 안팎)
+   - macOS는 논리 해상도를 바꿀 수 있어 `CSS × dpr = 실제 픽셀`이 성립하지 않습니다. 패널의
+     실제 픽셀 수를 들고 있다가 `패널 PPI × 프레임버퍼 / 패널 픽셀`로 환산하며, 14형·16형처럼
+     크기만 다른 모델은 패널 화면비(0.5% 차이)로 가려냅니다
+4. 사용자 보정(신용카드·화면 대각선·직접 입력). 보정값은 물리 픽셀 기준 PPI로 localStorage에
+   저장하므로, 브라우저 확대·축소나 배율이 다른 모니터로 옮겨도 실제 길이가 유지됩니다
+
+#### 장치 DB 갱신
+
+[src/tools/ruler/devices.generated.ts](src/tools/ruler/devices.generated.ts)는 자동 생성
+파일입니다. 직접 고치지 마세요. 빌드와는 무관하며(`pnpm build`는 이 스크립트를 부르지 않습니다),
+[분기마다 한 번 GitHub Actions](.github/workflows/update-devices.yml)가 갱신합니다. 손으로 돌릴
+때는 아래를 실행하거나, Actions 탭에서 `Update device DB`를 수동 실행하면 됩니다.
+
+```bash
+pnpm devices:update
+```
+
+워크플로는 1·4·7·10월 1일 09:00(KST)에 실행되며, 다시 생성 → 변경 여부 확인 → `pnpm build`로
+검증 → `main`에 직접 커밋 순으로 동작합니다. 출처가 HTML 스크래핑이라 사이트 구조가 바뀌면 표가
+비어 버릴 수 있는데, 수집량이 기준(Apple 20대·기타 100대·모델 코드 100개) 아래면 파일을 쓰지 않고
+**액션이 실패합니다**. 그 경우 스크립트의 파서를 고쳐야 한다는 신호입니다.
+
+`GITHUB_TOKEN`으로 만든 커밋은 다른 워크플로를 깨우지 않으므로, 마지막에 배포 워크플로를 직접
+호출합니다. 저장소 Settings → Actions → General에서 **Workflow permissions**가 `Read and write`
+여야 푸시가 됩니다.
+
+출처는 모두 공개 자료이며, 빌드 타임에 한 번만 받아 정적 파일로 굽습니다(런타임에 외부 요청을
+보내지 않습니다).
+
+| 출처 | 쓰임 |
+| --- | --- |
+| [ios-resolution.com](https://www.ios-resolution.com/) | iPhone·iPad 논리/물리 해상도와 PPI |
+| [screensiz.es](https://screensiz.es/) | 제조사 무관 화면 크기와 PPI (2020년 전후까지) |
+| [Play 콘솔 공개 기기 카탈로그](https://storage.googleapis.com/play_public/supported_devices.csv) | 안드로이드 모델 코드 ↔ 제품명 |
+| [scripts/curated-devices.json](scripts/curated-devices.json) | 최신 안드로이드 기기 PPI (직접 관리) |
+
+최신 안드로이드는 공개 DB가 따라오지 못하므로 `curated-devices.json`에 제품명과 PPI만 적어
+두면, 스크립트가 Play 카탈로그를 거쳐 지역별 모델 코드 전부로 넓혀 줍니다. 갱신 후에는
+경고로 뜨는 "카탈로그에서 못 찾은 제품명"을 확인하세요(제품명 표기가 바뀐 경우입니다).
+
 ### Serial Tester (`/serial`)
 
 - **WebSerial 플래셔 / WebUSB 디버그**: secure context가 필요하므로 HTTPS 배포에서 정상 동작
