@@ -32,6 +32,10 @@ type Ecl = (typeof ECC_LEVELS)[number]['value']
 const MAX_WIDTH = 420
 const MAX_LENGTH = 512
 
+const AUTO_MS_MIN = 50
+const AUTO_MS_MAX = 60_000
+const AUTO_MS_DEFAULT = 1000
+
 /** 저장 파일명에 쓸 수 있도록 내용을 다듬습니다. */
 function slug(text: string): string {
   const s = text.trim().replace(/[^0-9A-Za-z가-힣._-]+/g, '-').replace(/^-+|-+$/g, '')
@@ -43,6 +47,8 @@ export default function BarcodeGenerator() {
   const [bcid, setBcid] = useState(FORMATS[0].bcid)
   const [ecl, setEcl] = useState<Ecl>('M')
   const [upper, setUpper] = useState(false)
+  const [auto, setAuto] = useState(false)
+  const [autoMs, setAutoMs] = useState(String(AUTO_MS_DEFAULT))
   const [toast, setToast] = useState('')
   const [frameWidth, setFrameWidth] = useState(MAX_WIDTH)
 
@@ -62,6 +68,14 @@ export default function BarcodeGenerator() {
     }),
     [format, payload, ecl],
   )
+
+  const period = Math.min(Math.max(Math.round(Number(autoMs)) || 0, AUTO_MS_MIN), AUTO_MS_MAX)
+
+  useEffect(() => {
+    if (!auto) return
+    const id = setInterval(() => setText(uuidv4()), period)
+    return () => clearInterval(id)
+  }, [auto, period])
 
   useEffect(() => {
     const frame = frameRef.current
@@ -177,15 +191,21 @@ export default function BarcodeGenerator() {
         multiline
         maxRows={5}
         fullWidth
+        disabled={auto}
         slotProps={{
           htmlInput: { maxLength: MAX_LENGTH, spellCheck: false, autoCapitalize: 'off' },
           input: { sx: { fontFamily: 'ui-monospace, monospace', fontSize: '.9rem' } },
         }}
-        helperText={`${text.length} / ${MAX_LENGTH}자`}
+        helperText={auto ? `자동 갱신 중 · ${period}ms마다 새 UUID` : `${text.length} / ${MAX_LENGTH}자`}
       />
 
       <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1} useFlexGap sx={{ flexWrap: 'wrap' }}>
-        <Button variant="contained" onClick={() => setText(uuidv4())} sx={{ flexGrow: 1 }}>
+        <Button
+          variant="contained"
+          onClick={() => setText(uuidv4())}
+          disabled={auto}
+          sx={{ flexGrow: 1 }}
+        >
           임의 UUID 생성
         </Button>
         <Button variant="outlined" onClick={copyValue} disabled={!payload} sx={{ flexGrow: 1 }}>
@@ -235,6 +255,34 @@ export default function BarcodeGenerator() {
                 ))}
               </TextField>
             )}
+
+            <Stack direction="row" spacing={1} useFlexGap sx={{ alignItems: 'flex-start' }}>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={auto}
+                    onChange={(e) => {
+                      setAuto(e.target.checked)
+                      // 첫 갱신까지 한 주기를 기다리지 않도록 켜는 즉시 하나 뽑는다
+                      if (e.target.checked) setText(uuidv4())
+                    }}
+                  />
+                }
+                label="UUID 자동 갱신"
+                sx={{ mt: 0.5 }}
+              />
+              <TextField
+                label="갱신 주기"
+                type="number"
+                value={autoMs}
+                onChange={(e) => setAutoMs(e.target.value)}
+                size="small"
+                disabled={!auto}
+                slotProps={{ htmlInput: { min: AUTO_MS_MIN, max: AUTO_MS_MAX, step: 50 } }}
+                helperText={`${AUTO_MS_MIN}~${AUTO_MS_MAX}ms`}
+                sx={{ width: 148 }}
+              />
+            </Stack>
 
             <FormControlLabel
               control={
