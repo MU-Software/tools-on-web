@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="ko-kr">
+
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, height=device-height, initial-scale=1" />
+  <meta name="author" content="MUsoftware" />
+  <meta name="description" content="QUIRC wasm. (c)MUsoftware, 2022" />
+  <meta name="theme-color" content="#8989bb" />
+  <title>QR decoder</title>
+  <link rel="stylesheet" href="https://unpkg.com/mvp.css" />
+  <style>
+    html {
+      width: 100%;
+      height: 100%;
+      background-color: #8989bb;
+      background-image: linear-gradient(315deg, #8989bb 0%, #b5a4cb 74%);
+      overflow-x: hidden;
+      overscroll-behavior: none;
+
+      -webkit-touch-callout: none;
+
+      /* iOS Safari */
+      -webkit-user-select: none;
+      /* Safari */
+      -khtml-user-select: none;
+      /* Konqueror HTML */
+      -moz-user-select: none;
+      /* Old versions of Firefox */
+      -ms-user-select: none;
+      /* Internet Explorer/Edge */
+      user-select: none;
+      /* Non-prefixed version, currently
+         supported by Chrome, Edge, Opera and Firefox */
+
+      font-family: Open Sans, arial, Apple SD Gothic Neo, Noto Sans CJK KR, 본고딕, KoPubDotum, 나눔바른고딕, 나눔고딕, NanumGothic, 맑은고딕, Malgun Gothic, sans-serif;
+    }
+
+    body {
+      /* MVP.CSS */
+      /* NO, WE WON'T SUPPORT DARK MODE */
+      --color: #118bee;
+      --color-accent: #118bee15;
+      --color-bg: #fff;
+      --color-bg-secondary: #e9e9e9;
+      --color-link: #118bee;
+      --color-secondary: #920de9;
+      --color-secondary-accent: #920de90b;
+      --color-shadow: #f4f4f4;
+      --color-table: #118bee;
+      --color-text: #000;
+      --color-text-secondary: #999;
+
+      /* CUSTOM */
+      width: 100%;
+      height: 100%;
+
+      background-color: rgba(0, 0, 0, .0);
+    }
+
+    .loadFailedPageContainer {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 100%;
+      width: 100%;
+      z-index: 10000;
+      background-color: rgba(0, 0, 0, .75);
+      margin: 0;
+      padding: 0;
+      margin-top: 56px;
+
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    .loadFailedMessageBox {
+      width: 50%;
+      min-width: 15rem;
+      max-width: 30rem;
+      /* max-width: 30rem; */
+      padding: 1rem;
+      border: none;
+      background-color: rgba(137, 137, 187, .8);
+      box-shadow: 0px 2px 10px rgba(137, 137, 187, .5);
+      text-align: center;
+      font-weight: bold;
+      font-size: 0.75em;
+      transition-duration: 0.25s;
+    }
+
+    .loadFailedMessageBox:hover {
+      box-shadow: 0px 4px 16px rgba(137, 137, 187, .8);
+    }
+
+    .pageContainer {
+      margin-top: 56px;
+      padding-bottom: 2rem;
+
+      display: flex;
+      justify-content: center;
+      align-items: start;
+    }
+
+    kbd {
+      background-color: #eee;
+      border-radius: 3px;
+      border: 1px solid #b4b4b4;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, .2), 0 2px 0 0 rgba(255, 255, 255, .7) inset;
+      color: #333;
+      display: inline-block;
+      font-size: .85em;
+      font-weight: 700;
+      line-height: 1;
+      padding: 2px 4px;
+      white-space: nowrap;
+    }
+
+    section {
+      width: -moz-fit-content;
+      width: fit-content;
+
+      display: flex;
+      flex-direction: column;
+      flex-wrap: nowrap;
+
+      justify-content: center;
+      align-content: center;
+    }
+
+    section * {
+      align-self: center;
+    }
+
+    a {
+      color: #920de9;
+    }
+
+    section aside {
+      position: relative;
+      width: 22.5rem;
+      padding: 1rem;
+      border: none;
+      background-color: rgba(0, 0, 0, .2);
+      box-shadow: 0px 2px 10px rgba(0, 0, 0, .25);
+      text-align: center;
+      font-weight: normal;
+      transition-duration: 0.25s;
+    }
+
+    section aside:hover {
+      box-shadow: 0px 4px 16px rgba(0, 0, 0, .3);
+    }
+
+    .qrDecoderFileInputLabel {
+      width: -moz-fit-content;
+      width: fit-content;
+    }
+
+    .qrDecoderFileInputLabelBoxDragged {
+      background-color: rgba(0, 0, 0, .35);
+    }
+
+    .qrDecoderResultBox {
+      margin-top: 0;
+      margin-bottom: 2rem;
+
+      -webkit-user-select: text;
+      -khtml-user-select: text;
+      -moz-user-select: text;
+      -ms-user-select: text;
+      user-select: text;
+    }
+
+    .qrDecoderResultBox::-moz-selection, .qrDecoderResultBox *::-moz-selection {
+      /* Code for Firefox */
+      font-weight: bold;
+      color: white;
+      background: #920de9;
+    }
+
+    .qrDecoderResultBox::selection, .qrDecoderResultBox *::selection {
+      font-weight: bold;
+      color: white;
+      background: #920de9;
+    }
+
+    .qrDecoderInputImageCanvas {
+      border-radius: 8px;
+    }
+
+    .qrDecoderFileInput {
+      display: none;
+    }
+  </style>
+  <script src="./qr.js"></script>
+  <script>
+    window.onload = () => {
+      Module.onRuntimeInitialized = async _ => {
+        // Error message enum
+        const ERROR_MSG = {
+          'Success': {
+            code: 'QUIRC_SUCCESS',
+            ko_kr: '성공적으로 인식했습니다',
+          },
+          'Invalid grid size': {
+            code: 'QUIRC_ERROR_INVALID_GRID_SIZE',
+            ko_kr: '사진 내 QR 코드의 크기가 너무 큽니다',
+          },
+          'Invalid version': {
+            code: 'QUIRC_ERROR_INVALID_VERSION',
+            ko_kr: 'QR 코드의 버전 정보가 올바르지 않습니다',
+          },
+          'Format data ECC failure': {
+            code: 'QUIRC_ERROR_FORMAT_ECC',
+            ko_kr: 'QR 코드의 포맷 데이터에 대한 오류 복원 정보 인식에 실패했습니다',
+          },
+          'ECC failure': {
+            code: 'QUIRC_ERROR_DATA_ECC',
+            ko_kr: 'QR 코드에 포함된 오류 복원 정보 인식에 실패했습니다',
+          },
+          'Unknown data type': {
+            code: 'QUIRC_ERROR_UNKNOWN_DATA_TYPE',
+            ko_kr: 'QR 코드에 포함된 정보의 타입을 읽을 수 없습니다',
+          },
+          'Data overflow': {
+            code: 'QUIRC_ERROR_DATA_OVERFLOW',
+            ko_kr: 'QR 코드에 포함된 데이터의 크기가 읽기에 너무 큽니다',
+          },
+          'Data underflow': {
+            code: 'QUIRC_ERROR_DATA_UNDERFLOW',
+            ko_kr: 'QR 코드에 포함된데이터의 크기가 읽기에 너무 작습니다',
+          },
+        }
+
+
+        // WASM initialization
+        const api = {
+          setup: Module.cwrap('qr_setup', 'boolean', []),
+          cleanup: Module.cwrap('qr_cleanup', '', []),
+          resize: Module.cwrap('qr_resize', 'number', ['number', 'number']),
+          detect: Module.cwrap('qr_detect', 'boolean', []),
+          getResultHeapAddress: Module.cwrap('qr_result', 'number', ['boolean']),
+        };
+        api.setImage = (imgBuf, w, h) => {
+          let bufAddr = api.resize(w, h);
+          Module.HEAPU8.set(imgBuf, bufAddr);
+        };
+        api.getResult = () => {
+          let result = [];
+          let heapAddress = api.getResultHeapAddress(true);
+
+          while (heapAddress !== 0) {
+            let heapObject = new Uint8Array(Module.HEAPU8.buffer, heapAddress, 8896);
+            result.push((new TextDecoder()).decode(heapObject.slice(0, heapObject.indexOf(0))));
+            heapAddress = api.getResultHeapAddress(false);
+          }
+
+          return result;
+        };
+        api.setup();
+
+        // Frequently used DOM definition
+        const loadFailedPageContainer = document.getElementsByClassName('loadFailedPageContainer')[0]
+        const appPageContainer = document.getElementsByClassName('pageContainer')[0]
+        const inputLabelBox = document.getElementsByClassName('qrDecoderFileInputLabelBox')[0];
+        const targetInput = document.getElementById('qrDecoderFileInput');
+        const resultBox = document.getElementsByClassName('qrDecoderResultBox')[0];
+        const showCanvas = document.getElementsByClassName('qrDecoderInputImageCanvas')[0];
+        const showCanvasContext = showCanvas.getContext('2d');
+        const offscreenCanvas = document.createElement('canvas');
+        const offScreenCanvasContext = offscreenCanvas.getContext('2d')
+        const offscreenImage = new Image();
+
+        // Function definition
+        const isEmptyObject = (param) => Object.keys(param).length === 0 && param.constructor === Object;
+        const preventDefaultEvent = () => {
+          event.stopPropagation(); // Do not allow the dragover event to bubble.
+          event.preventDefault(); // Prevent default dragover event behavior.
+        }
+        const setOffscreenImage = () => {
+          let showCanvasWidth = showCanvas.getBoundingClientRect().width,
+            showCanvasHeight = showCanvas.getBoundingClientRect().height,
+            offscreenCanvasWidth = offscreenCanvas.width,
+            offscreenCanvasHeight = offscreenCanvas.height;
+          showCanvasContext.clearRect(0, 0, showCanvasWidth, showCanvasHeight);
+          showCanvasContext.beginPath();
+          offScreenCanvasContext.clearRect(0, 0, offscreenCanvasWidth, offscreenCanvasHeight);
+          offScreenCanvasContext.beginPath();
+
+          // Set offscreen canvas
+          offscreenCanvas.width = offscreenImage.width;
+          offscreenCanvas.height = offscreenImage.height;
+          offScreenCanvasContext.drawImage(offscreenImage, 0, 0);
+          // Calculate proper height of drawn image
+          let newShowCanvasHeight = (offscreenImage.height / offscreenImage.width) * showCanvasWidth;
+          showCanvas.height = newShowCanvasHeight;
+          showCanvasContext.drawImage(offscreenImage, 0, 0, showCanvasWidth, newShowCanvasHeight);
+
+          // Detect QR code
+          api.setImage(getImageRGBA(), offscreenCanvas.width, offscreenCanvas.height);
+          if (api.detect()) {
+            alert('QR코드를 읽는 중 문제가 발생했습니다!');
+            return;
+          }
+          setResult(api.getResult());
+        };
+        const getImageRGBA = () => offScreenCanvasContext.getImageData(0, 0, offscreenCanvas.width, offscreenCanvas.height).data;
+        const setResult = (result) => {
+          let parsedResult = { data: [], error: {}, };
+          let htmledResult = {}
+
+          result.forEach((value, index, array) => {
+            if (value in ERROR_MSG) {
+              let errorObj = ERROR_MSG[value];
+              if (!(errorObj.code in parsedResult.error))
+                parsedResult.error[errorObj.code] = {count: 1, error: errorObj};
+              else
+                parsedResult.error[errorObj.code].count++;
+            } else {
+              parsedResult.data.push(value);
+            }
+          });
+
+          console.log(parsedResult);
+
+          resultBox.innerHTML = '';
+
+          if (parsedResult.data.length === 0) {
+            resultBox.style.textAlign = 'center';
+            resultBox.innerText = '인식된 정보가 없습니다!';
+          } else {
+            resultBox.style.textAlign = 'start';
+            parsedResult.data.forEach((value, index, array) => {
+              let newDom = document.createElement('p');
+              newDom.style.overflowWrap = 'break-word';
+              newDom.innerText = value;
+              resultBox.append(newDom);
+            });
+          }
+
+          if (!isEmptyObject(parsedResult.error)) {
+            resultBox.style.textAlign = 'start';
+
+            let newDetailsDom = document.createElement('details');
+            let newSummaryDom = document.createElement('summary');
+            newSummaryDom.innerText = '인식 중 몇몇 오류가 발견되었습니다';
+            newDetailsDom.append(newSummaryDom);
+            resultBox.append(newDetailsDom);
+
+            let errorMsg = '';
+            for (const [key, value] of Object.entries(parsedResult.error)) {
+              errorMsg += value.error.ko_kr + ' : ' + value.count + '개\n';
+            }
+            newDetailsDom.innerText = errorMsg;
+          }
+        };
+        const onFileInEvent = (event) => {
+          preventDefaultEvent();
+          inputLabelBox.classList.remove('qrDecoderFileInputLabelBoxDragged');
+
+          let targetFile = null;
+          let items = null;
+
+          if (event.clipboardData) { // ClipboardEvent
+            items = (event.clipboardData || event.originalEvent.clipboardData).items;
+          } else if (event.dataTransfer) { // Maybe it's DragEvent?
+            items = event.dataTransfer.files; // Grab the list of files dragged to the drop box.
+          } else if (event.type && event.type === 'change') {
+            items = event.target.files;
+          } else {
+            alert('이 브라우저는 해당 동작을 지원하지 않습니다.');
+            return;
+          }
+
+          // find pasted image among pasted items
+          for (let i = 0; i < items.length; i++) {
+            if (items[i].type.indexOf("image") === 0) {
+              let blob = null;
+              try {
+                blob = items[i].getAsFile();
+              } catch (error) {
+                try {
+                  blob = items[i];
+                } catch (error) {
+                  alert('사진을 불러오는 중 문제가 발생했습니다.');
+                  return;
+                }
+              }
+
+              let reader = new FileReader();
+              reader.onload = (event) => { offscreenImage.src = event.target.result }; // data url!
+              reader.readAsDataURL(blob);
+              return;
+            }
+          }
+
+          alert('인식 가능한 사진 파일이 아닙니다.');
+        }
+
+        offscreenImage.onload = setOffscreenImage;
+        targetInput.onchange = onFileInEvent;
+        document.onpaste = onFileInEvent;
+        document.ondrop = onFileInEvent;
+        document.ondragover = (event) => preventDefaultEvent();
+        document.ondragenter = (event) => inputLabelBox.classList.add('qrDecoderFileInputLabelBoxDragged');
+        document.ondragleave = (event) => {
+          // I wrote this function because ondragleave fired when hovering a child element.
+          // I couldn't use e.relatedTarget because Safari doesn't support it.
+          let x = event.clientX, y = event.clientY;
+          let currentHoveredElement = document.elementFromPoint(x, y);
+          if (!appPageContainer.contains(currentHoveredElement) || (x === 0 && y === 0))
+            inputLabelBox.classList.remove('qrDecoderFileInputLabelBoxDragged');
+        };
+
+        showCanvasContext.fillStyle = "white";
+        showCanvasContext.fillRect(0, 0, showCanvas.width, showCanvas.height);
+        showCanvasContext.beginPath();
+
+        // Initialization complete, remove loading layer
+        loadFailedPageContainer.style.display = 'none';
+
+        // inputLabelBox.ondragenter = (event) => inputLabelBox.classList.add('qrDecoderFileInputLabelBoxDragged');
+        // inputLabelBox.ondragleave = (event) => {
+        //   // I wrote this function because ondragleave fired when hovering a child element.
+        //   // I couldn't use e.relatedTarget because Safari doesn't support it.
+        //   let x = event.clientX, y = event.clientY;
+        //   let currentHoveredElement = document.elementFromPoint(x, y);
+        //   if (!inputLabelBox.contains(currentHoveredElement))
+        //     inputLabelBox.classList.remove('qrDecoderFileInputLabelBoxDragged');
+        // };
+        // inputLabelBox.ondragover = (event) => preventDefaultEvent();
+        // inputLabelBox.ondrop = onFileInEvent;
+      };
+    }
+
+  </script>
+</head>
+
+<body>
+  <div class="loadFailedPageContainer">
+    <section>
+      <aside class="loadFailedMessageBox">
+        <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" version="1.1" width="96"
+          height="96" viewBox="0 0 24 24">
+          <path d="M12,2L1,21H23M12,6L19.53,19H4.47M11,10V14H13V10M11,16V18H13V16" />
+        </svg><br />
+        QR코드를 읽는 모듈을 불러오고 있습니다.<br />
+        만약 이 화면이 30초 이상 계속된다면<br />
+        이 페이지를 새로고침 해주시고,<br />
+        그래도 이 화면이 보이시면<br />
+        저에게 연락 부탁드립니다.<br />
+        <br />
+        Currently loading QR decoder module.<br />
+        If you see this screen for more than 30sec, <br />
+        Please reload this page,<br />
+        and if you still see this screen,<br />
+        Please contact me.<br />
+        <br />
+      </aside>
+    </section>
+  </div>
+  <div class="pageContainer">
+    <section>
+      <header style="width: unset; padding: unset;">
+        <h2 style="margin: 0;">QR decoder</h2>
+        <p style="margin-top: 0;"><a href="https://github.com/dlbeer/quirc">Quirc</a>
+          on <a href="https://developer.mozilla.org/ko/docs/WebAssembly">WebAssembly</a></p>
+        <sup>VER 220117</sup>
+      </header>
+      <label class="qrDecoderFileInputLabel" for="qrDecoderFileInput">
+        <aside class="qrDecoderFileInputLabelBox">
+          여기를 눌러서 사진을 선택하시거나<br />
+          파일을 여기에 끌어 놓아주시거나<br />
+          또는 <kbd>Ctrl</kbd>+<kbd>V</kbd>로 사진을 붙여넣어 주세요!<br />
+        </aside>
+        <input class="qrDecoderFileInput" id="qrDecoderFileInput" type="file" accept="image/*" />
+      </label>
+      <aside class="qrDecoderResultBox">
+        결과는 여기에 표시돼요!
+      </aside>
+      <canvas class="qrDecoderInputImageCanvas" width="360" height="360"></canvas>
+    </section>
+  </div>
+</body>
+
+</html>

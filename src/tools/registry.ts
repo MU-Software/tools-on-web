@@ -21,6 +21,15 @@ export const TOOLS: Tool[] = [
     component: lazy(() => import('./barcode/BarcodeGenerator')),
   },
   {
+    path: '/qr-reader',
+    icon: '🔎',
+    title: 'QR 리더',
+    desc: '사진·스크린샷이나 카메라로 QR·바코드를 zxing-wasm으로 읽습니다.',
+    tags: ['QR', '바코드', '카메라', 'WebAssembly'],
+    // zxing-wasm을 끌고 오므로 lazy 유지
+    component: lazy(() => import('./qr/QrReader')),
+  },
+  {
     path: '/serial',
     icon: '🔌',
     title: 'Serial Tester',
