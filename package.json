@@ -15,6 +15,7 @@
     "@emotion/styled": "^11.14.1",
     "@mui/icons-material": "^9.0.0",
     "@mui/material": "^9.0.0",
+    "bwip-js": "^4.11.4",
     "esptool-js": "^0.6.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.5",

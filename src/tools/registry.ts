@@ -20,6 +20,15 @@ export const TOOLS: Tool[] = [
     component: lazy(() => import('./qr/QrGenerator')),
   },
   {
+    path: '/barcode',
+    icon: '🏷️',
+    title: 'UUID 바코드 생성기',
+    desc: 'UUID v4를 Code 128·Data Matrix 등 여러 바코드 포맷으로 만듭니다.',
+    tags: ['바코드', 'UUID', '오프라인'],
+    // bwip-js를 끌고 오므로 lazy 유지
+    component: lazy(() => import('./barcode/BarcodeGenerator')),
+  },
+  {
     path: '/serial',
     icon: '🔌',
     title: 'Serial Tester',

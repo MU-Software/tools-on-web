@@ -13,6 +13,9 @@ import {
   TextField,
   Typography,
 } from '@mui/material'
+import { uuidv4 } from '../../lib/uuid'
+import { copyText } from '../../lib/clipboard'
+import { downloadBlob } from '../../lib/download'
 
 const ECC_LEVELS = [
   { value: 'L', label: 'L (7%)' },
@@ -25,15 +28,6 @@ type Ecl = (typeof ECC_LEVELS)[number]['value']
 
 /** 조용한 영역 (모듈 단위) */
 const QUIET = 4
-
-function uuidv4(): string {
-  if (crypto.randomUUID) return crypto.randomUUID()
-  const b = crypto.getRandomValues(new Uint8Array(16))
-  b[6] = (b[6] & 0x0f) | 0x40 // version
-  b[8] = (b[8] & 0x3f) | 0x80 // variant
-  const hex = [...b].map((x) => x.toString(16).padStart(2, '0')).join('')
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
-}
 
 export default function QrGenerator() {
   const [uuid, setUuid] = useState(uuidv4)
@@ -103,21 +97,7 @@ export default function QrGenerator() {
   }, [regenerate])
 
   const copyUuid = async () => {
-    try {
-      await navigator.clipboard.writeText(shown)
-      setToast('복사했습니다')
-    } catch {
-      // 비보안 컨텍스트 폴백
-      const ta = document.createElement('textarea')
-      ta.value = shown
-      ta.style.position = 'fixed'
-      ta.style.opacity = '0'
-      document.body.appendChild(ta)
-      ta.select()
-      const ok = document.execCommand('copy')
-      ta.remove()
-      setToast(ok ? '복사했습니다' : '복사에 실패했습니다')
-    }
+    setToast((await copyText(shown)) ? '복사했습니다' : '복사에 실패했습니다')
   }
 
   const savePng = () => {
@@ -126,14 +106,7 @@ export default function QrGenerator() {
         setToast('저장에 실패했습니다')
         return
       }
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `uuid-${uuid}.png`
-      document.body.appendChild(a)
-      a.click()
-      a.remove()
-      setTimeout(() => URL.revokeObjectURL(url), 1000)
+      downloadBlob(blob, `uuid-${uuid}.png`)
       setToast('PNG를 저장했습니다')
     }, 'image/png')
   }
