@@ -17,7 +17,6 @@
     "@mui/material": "^9.0.0",
     "bwip-js": "^4.11.4",
     "esptool-js": "^0.6.0",
-    "qrcode": "^1.5.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-router": "^7.9.4"
@@ -26,7 +25,6 @@
     "@eslint/js": "^10.0.1",
     "@rolldown/plugin-babel": "^0.2.3",
     "@types/node": "^24.12.2",
-    "@types/qrcode": "^1.5.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@types/w3c-web-serial": "^1.0.8",
