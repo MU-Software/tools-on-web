@@ -46,4 +46,28 @@ export const TOOLS: Tool[] = [
     tags: ['자', 'DPI', 'PPI', '길이', '보정', '측정'],
     component: lazy(() => import('./ruler/ScreenRuler')),
   },
+  {
+    path: '/unit',
+    icon: '📐',
+    title: '단위 변환기',
+    desc: '길이·무게·온도·데이터 등 15개 계열을 같은 계열의 모든 단위로 한 번에 환산합니다.',
+    tags: ['단위', '변환', '길이', '무게', '온도', '오프라인'],
+    component: lazy(() => import('./unit/UnitConverter')),
+  },
+  {
+    path: '/timezone',
+    icon: '🌏',
+    title: '시간대 변환기',
+    desc: '기준 시각 하나를 여러 시간대에 동시에 펼쳐 보고, 시차와 날짜 차이를 확인합니다.',
+    tags: ['시간대', 'IANA', '시차', 'UTC', '서머타임'],
+    component: lazy(() => import('./timezone/TimezoneConverter')),
+  },
+  {
+    path: '/unix-time',
+    icon: '⏱️',
+    title: '유닉스 시간',
+    desc: '현재 유닉스 시간을 실시간으로 보여주고, 초·밀리초·나노초 타임스탬프를 날짜로 풉니다.',
+    tags: ['유닉스', '타임스탬프', 'epoch', 'ISO 8601'],
+    component: lazy(() => import('./unixtime/UnixTime')),
+  },
 ]
