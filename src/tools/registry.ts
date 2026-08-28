@@ -63,6 +63,22 @@ export const TOOLS: Tool[] = [
     component: lazy(() => import('./timezone/TimezoneConverter')),
   },
   {
+    path: '/encoding',
+    icon: '🔠',
+    title: '인코딩 변환기',
+    desc: 'Base64·Base32·16진수·퍼센트·\\uXXXX 등으로 텍스트와 파일을 서로 옮깁니다.',
+    tags: ['Base64', 'Base32', 'hex', '유니코드', 'Data URL', '이스케이프'],
+    component: lazy(() => import('./encoding/EncodingConverter')),
+  },
+  {
+    path: '/jwt',
+    icon: '🔐',
+    title: 'JWT 파서',
+    desc: '토큰을 헤더·페이로드·서명으로 풀고, 만료 시각과 서명까지 확인합니다.',
+    tags: ['JWT', 'JWS', '토큰', '서명', 'Base64URL'],
+    component: lazy(() => import('./jwt/JwtParser')),
+  },
+  {
     path: '/unix-time',
     icon: '⏱️',
     title: '유닉스 시간',
