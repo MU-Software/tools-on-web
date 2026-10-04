@@ -39,6 +39,15 @@ export const TOOLS: Tool[] = [
     component: lazy(() => import('./serial/SerialTester')),
   },
   {
+    path: '/stl-repair',
+    icon: '🧊',
+    title: 'STL 수리',
+    desc: '3D 프린팅용 STL의 구멍·뒤집힌 법선·겹친 셸을 브라우저 안에서 고쳐 닫힌 입체로 만듭니다.',
+    tags: ['STL', '3D 프린팅', '메시', 'manifold', 'WebAssembly', '오프라인'],
+    // three.js와 manifold-3d를 끌고 오므로 lazy 유지
+    component: lazy(() => import('./stl/StlRepair')),
+  },
+  {
     path: '/ruler',
     icon: '📏',
     title: '화면 자',

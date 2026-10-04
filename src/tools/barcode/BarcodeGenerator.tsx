@@ -18,6 +18,7 @@ import {
 import { uuidv4 } from '../../lib/uuid'
 import { copyText } from '../../lib/clipboard'
 import { downloadBlob } from '../../lib/download'
+import { errorMessage } from '../../lib/error'
 import { FORMATS, GROUPS, toPayload } from './formats'
 
 const ECC_LEVELS = [
@@ -93,7 +94,7 @@ export default function BarcodeGenerator() {
       format.render(probe, { ...options, scale: 1 })
       return { width: probe.width, height: probe.height, error: '' }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
+      const msg = errorMessage(e)
       // 'bwipp.ean13badLength#6878: EAN-13 must be ...' 같은 내부 접두어는 걷어낸다
       return { width: 0, height: 0, error: msg.replace(/^bwipp?[.\w]*#?\d*:\s*/, '') }
     }

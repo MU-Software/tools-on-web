@@ -21,21 +21,15 @@ import DownloadIcon from '@mui/icons-material/Download'
 import LoginIcon from '@mui/icons-material/Login'
 import { copyText } from '../../lib/clipboard'
 import { downloadBlob } from '../../lib/download'
-import { isUtf8 } from '../../lib/bytes'
+import { formatSize, isUtf8 } from '../../lib/bytes'
+import { errorMessage } from '../../lib/error'
+import { useDocumentDrop } from '../../lib/useDocumentDrop'
 import { CODECS, CODEC_BY_ID, type Codec, detectCodec } from './codecs'
 import { sniff } from './media'
 
 const MAX_FILE = 20 << 20
 
 const EMPTY = new Uint8Array()
-
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
-
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes}바이트`
-  if (bytes < 1 << 20) return `${(bytes / 1024).toFixed(1)}KB`
-  return `${(bytes / (1 << 20)).toFixed(1)}MB`
-}
 
 type Source = {
   bytes: Uint8Array<ArrayBuffer>
@@ -52,7 +46,7 @@ function decodeText(text: string, inputId: string): Source {
   try {
     return { bytes: codec.decode(text), detected: inputId === 'auto' ? codec : null, error: '' }
   } catch (e) {
-    return { bytes: EMPTY, detected: inputId === 'auto' ? codec : null, error: message(e) }
+    return { bytes: EMPTY, detected: inputId === 'auto' ? codec : null, error: errorMessage(e) }
   }
 }
 
@@ -62,7 +56,7 @@ function encodeRow(codec: Codec, bytes: Uint8Array, text: boolean): { value: str
   try {
     return { value: codec.encode(bytes), note: '' }
   } catch (e) {
-    return { value: '', note: message(e) }
+    return { value: '', note: errorMessage(e) }
   }
 }
 
@@ -71,7 +65,6 @@ export default function EncodingConverter() {
   const [text, setText] = useState('안녕하세요, Tools on Web!')
   const [inputId, setInputId] = useState('auto')
   const [file, setFile] = useState<Loaded | null>(null)
-  const [dragging, setDragging] = useState(false)
   const [toast, setToast] = useState('')
   const pickerRef = useRef<HTMLInputElement>(null)
 
@@ -102,10 +95,22 @@ export default function EncodingConverter() {
       setToast(`${formatSize(MAX_FILE)}까지만 읽습니다`)
       return
     }
-    const buffer = await picked.arrayBuffer()
-    setFile({ name: picked.name, bytes: new Uint8Array(buffer) })
-    setTab('file')
+    try {
+      const buffer = await picked.arrayBuffer()
+      setFile({ name: picked.name, bytes: new Uint8Array(buffer) })
+      setTab('file')
+    } catch (e) {
+      // 폴더나 그사이 지워진 파일은 읽기가 거절됩니다.
+      setToast(`파일을 읽지 못했습니다: ${errorMessage(e)}`)
+    }
   }, [])
+
+  // 파일 탭이 아니어도 페이지 어디에 놓으면 읽고 파일 탭으로 넘어갑니다.
+  const dragging = useDocumentDrop((data) => {
+    const picked = data?.files[0]
+    if (picked) void load(picked)
+    else setToast('파일을 찾을 수 없습니다')
+  })
 
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
@@ -143,6 +148,12 @@ export default function EncodingConverter() {
         </Tabs>
 
         <CardContent>
+          {/* 놓기는 페이지 어디서나 받지만 놓기 상자는 파일 탭에만 있어, 텍스트 탭에서는 받는다는 표시를 따로 띄웁니다. */}
+          {dragging && tab === 'text' && (
+            <Alert severity="info" sx={{ mb: 1.5 }}>
+              파일을 놓으면 파일 탭에서 읽습니다
+            </Alert>
+          )}
           {tab === 'text' ? (
             <Stack spacing={1.5}>
               <TextField
@@ -190,16 +201,6 @@ export default function EncodingConverter() {
           ) : (
             <Stack spacing={1.5}>
               <Box
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragging(true)
-                }}
-                onDragLeave={() => setDragging(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setDragging(false)
-                  void load(e.dataTransfer.files[0] ?? null)
-                }}
                 onClick={() => pickerRef.current?.click()}
                 sx={{
                   p: 4,

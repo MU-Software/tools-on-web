@@ -71,3 +71,9 @@ export function hexDecode(text: string): Uint8Array<ArrayBuffer> {
   for (let i = 0; i < out.length; i++) out[i] = parseInt(cleaned.slice(i * 2, i * 2 + 2), 16)
   return out
 }
+
+export function formatSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes}바이트`
+  if (bytes < 1 << 20) return `${(bytes / 1024).toFixed(1)}KB`
+  return `${(bytes / (1 << 20)).toFixed(1)}MB`
+}

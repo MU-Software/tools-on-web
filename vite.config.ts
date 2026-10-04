@@ -34,6 +34,9 @@ export default defineConfig({
     react(),
     babel({ presets: [reactCompilerPreset({ target: '19' })] }),
   ],
+  // manifold-3d는 import.meta.url 기준으로 .wasm을 찾아서, 사전 번들로 옮기면 경로가 깨집니다.
+  optimizeDeps: { exclude: ['manifold-3d'] },
+  worker: { format: 'es' },
   server: {
     host: '127.0.0.1',
     port: 5173,

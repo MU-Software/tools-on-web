@@ -13,6 +13,8 @@ import {
   Typography,
 } from '@mui/material'
 import { copyText } from '../../lib/clipboard'
+import { errorMessage } from '../../lib/error'
+import { useDocumentDrop } from '../../lib/useDocumentDrop'
 import { captureFrame, decodeFrame, decodeImage, type DecodeResult, type Hit } from './decode'
 
 const VALID_COLOR = '#00e676'
@@ -35,8 +37,6 @@ function firstImage(data: DataTransfer | null): File | null {
 
 const isLink = (text: string) => /^(https?|mailto|tel|geo|sms):/i.test(text.trim())
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
-
 function describe(hit: Hit): string[] {
   return [
     hit.label,
@@ -55,7 +55,6 @@ export default function QrReader() {
   const [result, setResult] = useState<DecodeResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
-  const [dragging, setDragging] = useState(false)
   const [toast, setToast] = useState('')
 
   const overlayRef = useRef<HTMLCanvasElement>(null)
@@ -96,7 +95,7 @@ export default function QrReader() {
         .catch((e: unknown) => {
           if (runRef.current !== run) return
           setResult(null)
-          setError(message(e))
+          setError(errorMessage(e))
         })
         .finally(() => {
           if (runRef.current === run) setBusy(false)
@@ -122,7 +121,7 @@ export default function QrReader() {
       streamRef.current = media
       setStream(media)
     } catch (e) {
-      setError(`카메라를 열 수 없습니다: ${message(e)}`)
+      setError(`카메라를 열 수 없습니다: ${errorMessage(e)}`)
     }
   }, [show])
 
@@ -151,7 +150,7 @@ export default function QrReader() {
         } catch (e) {
           if (stopped) return
           stopCamera()
-          setError(message(e))
+          setError(errorMessage(e))
           return
         }
       }
@@ -200,7 +199,13 @@ export default function QrReader() {
     })
   }, [result])
 
-  // 페이지 어디에 놓거나 붙여넣어도 받도록 문서 단위로 듣습니다.
+  const dragging = useDocumentDrop((data) => {
+    const image = firstImage(data)
+    if (image) open(image)
+    else setError('이미지 파일을 찾을 수 없습니다')
+  })
+
+  // 페이지 어디에 붙여넣어도 받도록 문서 단위로 듣습니다.
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
       const image = firstImage(e.clipboardData)
@@ -208,32 +213,8 @@ export default function QrReader() {
       e.preventDefault()
       open(image)
     }
-    const onDrop = (e: DragEvent) => {
-      e.preventDefault()
-      setDragging(false)
-      const image = firstImage(e.dataTransfer)
-      if (image) open(image)
-      else setError('이미지 파일을 찾을 수 없습니다')
-    }
-    const onDragOver = (e: DragEvent) => {
-      e.preventDefault()
-      setDragging(true)
-    }
-    // 자식 위를 지날 때도 발생하므로, 창을 벗어난 경우만 거릅니다.
-    const onDragLeave = (e: DragEvent) => {
-      if (e.relatedTarget === null) setDragging(false)
-    }
-
     document.addEventListener('paste', onPaste)
-    document.addEventListener('drop', onDrop)
-    document.addEventListener('dragover', onDragOver)
-    document.addEventListener('dragleave', onDragLeave)
-    return () => {
-      document.removeEventListener('paste', onPaste)
-      document.removeEventListener('drop', onDrop)
-      document.removeEventListener('dragover', onDragOver)
-      document.removeEventListener('dragleave', onDragLeave)
-    }
+    return () => document.removeEventListener('paste', onPaste)
   }, [open])
 
   const copyHit = async (text: string) => {

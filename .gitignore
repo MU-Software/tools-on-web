@@ -25,3 +25,6 @@ dist-ssr
 
 # vite.config.ts가 src/site.ts로부터 생성
 /index.html
+
+# tsc 증분 빌드 캐시
+*.tsbuildinfo

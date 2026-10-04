@@ -15,6 +15,7 @@ import {
 } from '@mui/material'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import { copyText } from '../../lib/clipboard'
+import { errorMessage } from '../../lib/error'
 import {
   CLAIM_LABELS,
   type Jwt,
@@ -44,8 +45,6 @@ const STATE_COLOR = {
   unknown: 'default',
 } as const
 
-const message = (e: unknown) => (e instanceof Error ? e.message : String(e))
-
 /** 어떤 입력으로 얻은 결과인지 함께 담아, 입력이 바뀌면 저절로 흘려보냅니다. */
 type Verified = { token: string; key: string; format: KeyFormat; ok: boolean; error: string }
 
@@ -61,7 +60,7 @@ export default function JwtParser() {
     try {
       return { jwt: parseJwt(token), error: '' }
     } catch (e) {
-      return { jwt: null, error: token.trim() ? message(e) : '' }
+      return { jwt: null, error: token.trim() ? errorMessage(e) : '' }
     }
   }, [token])
 
@@ -90,7 +89,7 @@ export default function JwtParser() {
     try {
       setVerified({ ...base, ok: await verifySignature(jwt, key, format), error: '' })
     } catch (e) {
-      setVerified({ ...base, ok: false, error: message(e) })
+      setVerified({ ...base, ok: false, error: errorMessage(e) })
     }
   }
 
