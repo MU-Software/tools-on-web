@@ -93,13 +93,17 @@ pnpm devices:update
 | 출처 | 쓰임 |
 | --- | --- |
 | [ios-resolution.com](https://www.ios-resolution.com/) | iPhone·iPad 논리/물리 해상도와 PPI |
-| [screensiz.es](https://screensiz.es/) | 제조사 무관 화면 크기와 PPI (2020년 전후까지) |
+| [scripts/generic-devices.json](scripts/generic-devices.json) | 제조사 무관 화면 크기와 PPI (직접 관리) |
 | [Play 콘솔 공개 기기 카탈로그](https://storage.googleapis.com/play_public/supported_devices.csv) | 안드로이드 모델 코드 ↔ 제품명 |
 | [scripts/curated-devices.json](scripts/curated-devices.json) | 최신 안드로이드 기기 PPI (직접 관리) |
 
 최신 안드로이드는 공개 DB가 따라오지 못하므로 `curated-devices.json`에 제품명과 PPI만 적어
 두면, 스크립트가 Play 카탈로그를 거쳐 지역별 모델 코드 전부로 넓혀 줍니다. 갱신 후에는
 경고로 뜨는 "카탈로그에서 못 찾은 제품명"을 확인하세요(제품명 표기가 바뀐 경우입니다).
+
+`generic-devices.json`은 [screensiz.es](https://screensiz.es/)의 마지막 자료(2020년 전후까지)를
+옮겨 온 것입니다. 이 사이트는 갱신이 멈췄고 2026-10부터 응답도 없으며, 화면 인치·PPI를 담은
+관리되는 공개 자료는 따로 없습니다. 노트북·모니터 등을 더 넣으려면 이 파일에 직접 추가하세요.
 
 ### 시간대 변환기 (`/timezone`)
 

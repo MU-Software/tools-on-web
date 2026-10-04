@@ -14,10 +14,11 @@ import { dirname, resolve } from 'node:path'
 const HERE = dirname(fileURLToPath(import.meta.url))
 const OUT = resolve(HERE, '../src/tools/ruler/devices.generated.ts')
 const CURATED = resolve(HERE, 'curated-devices.json')
+// screensiz.es가 2019년쯤 갱신을 멈추고 2026-10에는 응답도 없어, 마지막 자료를 여기 옮겨 두고 직접 관리한다
+const GENERIC = resolve(HERE, 'generic-devices.json')
 
 const SOURCES = {
   apple: 'https://www.ios-resolution.com/',
-  generic: 'https://screensiz.es/',
   playCatalog: 'https://storage.googleapis.com/play_public/supported_devices.csv',
 }
 
@@ -45,74 +46,43 @@ const num = (text) => {
   return Number.isFinite(value) && value > 0 ? value : 0
 }
 
-/** ios-resolution.com: 이름 · 논리 해상도 · 물리 해상도 · PPI · 배율 */
+/** ios-resolution.com: 이름 · 논리 해상도 · PPI · 배율 */
 function parseApple(html) {
+  const cellsOf = (row, tag) =>
+    [...row.matchAll(new RegExp(`<${tag}[^>]*>(.*?)</${tag}>`, 'gs'))].map((m) => stripTags(m[1]))
+  const rows = rowsOf(html)
+  // 열이 끼어드는 일이 있어(2026-10에 'More Space' 추가) 위치가 아니라 머리글 이름으로 찾는다
+  const header = cellsOf(rows.find((row) => /<th/.test(row)) ?? '', 'th')
+  const wanted = {
+    name: 'Family & Model',
+    cssW: 'Logical Width',
+    cssH: 'Logical Height',
+    ppi: 'PPI',
+    scale: 'Scale Factor',
+  }
+  const at = Object.fromEntries(Object.entries(wanted).map(([key, title]) => [key, header.indexOf(title)]))
+  const lost = Object.entries(at).filter(([, index]) => index < 0)
+  if (lost.length) {
+    throw new Error(`${SOURCES.apple} 표 머리글이 바뀌었습니다: ${lost.map(([key]) => wanted[key]).join(', ')} 없음`)
+  }
+
   const out = []
-  for (const row of rowsOf(html)) {
-    const cells = [...row.matchAll(/<td[^>]*>(.*?)<\/td>/gs)].map((m) => stripTags(m[1]))
-    if (cells.length < 7) continue
-    const [name, cssW, cssH, , , ppi, scale] = cells
-    if (!name || !num(ppi) || !num(cssW)) continue
+  for (const row of rows) {
+    const cells = cellsOf(row, 'td')
+    if (cells.length < header.length) continue
+    const name = cells[at.name]
+    const [cssW, cssH, ppi, scale] = [at.cssW, at.cssH, at.ppi, at.scale].map((i) => num(cells[i]))
+    if (!name || !ppi || !cssW) continue
     // 시계는 이 도구로 열 일이 없다
     if (/^Apple Watch/i.test(name)) continue
     out.push({
       name,
-      ppi: Math.round(num(ppi)),
-      css: [Math.min(num(cssW), num(cssH)), Math.max(num(cssW), num(cssH))],
-      dpr: num(scale) || 1,
+      ppi: Math.round(ppi),
+      css: [Math.min(cssW, cssH), Math.max(cssW, cssH)],
+      dpr: scale || 1,
       kind: /iPad/i.test(name) ? 'tablet' : 'phone',
       platform: /iPad/i.test(name) ? 'ipad' : 'ios',
     })
-  }
-  return out
-}
-
-/** screensiz.es: 제조사 무관 화면 목록. 논리 해상도가 빠진 행이 많아 PPI 위주로 쓴다. */
-function parseGeneric(html) {
-  const out = []
-  for (const row of rowsOf(html)) {
-    const cells = Object.fromEntries(
-      [...row.matchAll(/<t[dh][^>]*class="([^"]*)"[^>]*>(.*?)<\/t[dh]>/gs)].map((m) => [
-        m[1].split(/\s+/)[0],
-        stripTags(m[2]),
-      ]),
-    )
-    const name = cells['persist'] ?? cells['name-value']
-    const ppi = Math.round(num(cells['ppi-value']))
-    const inches = num(cells['physical_size_in-value'])
-    const os = cells['operating_system-value'] ?? ''
-    if (!name || !ppi || !inches || name.toLowerCase() === 'device') continue
-    if (/^{{/.test(name)) continue
-    // 아이폰·아이패드는 ios-resolution.com 쪽이 더 정확하고 최신이라 여기서는 뺀다
-    if (os === 'iOS' || /^Apple (iPhone|iPad|iPod)/i.test(name)) continue
-
-    const pxW = num(cells['px_width-value'])
-    const pxH = num(cells['px_height-value'])
-    const cssW = num(cells['device_width-value'])
-    const dpr = num((cells['px_density-value'] ?? '').match(/(\d+)%/)?.[1]) / 100
-
-    const kind =
-      os === 'Windows' || os === 'OS X' || os === 'Chrome'
-        ? inches <= 18
-          ? 'laptop'
-          : 'desktop'
-        : inches < 7
-          ? 'phone'
-          : 'tablet'
-
-    const row2 = { name: `${tidy(name)} (${inches}")`, ppi, kind }
-    if (dpr && pxW && pxH) {
-      const css = [
-        Math.round(Math.min(pxW, pxH) / dpr),
-        Math.round(Math.max(pxW, pxH) / dpr),
-      ]
-      // 표에 적힌 논리 너비와 어긋나면 자료가 부정확한 것이니 화면 크기 매칭에서 뺀다
-      if (!cssW || css.some((v) => Math.abs(v - cssW) <= 2)) {
-        row2.css = css
-        row2.dpr = dpr
-      }
-    }
-    out.push(row2)
   }
   return out
 }
@@ -148,33 +118,19 @@ const mergeSameScreens = (rows) => {
   })
 }
 
-/** 'BlackBerry BlackBerry Priv'처럼 제조사가 겹쳐 적힌 이름을 다듬는다. */
-const tidy = (name) => {
-  const words = name.split(' ')
-  return words[0] === words[1] ? words.slice(1).join(' ') : name
-}
-
-const dedupe = (rows) => {
-  const seen = new Set()
-  return rows.filter((r) => {
-    const key = `${r.name.toLowerCase().replace(/[^a-z0-9]/g, '')}/${r.ppi}`
-    return !seen.has(key) && seen.add(key)
-  })
-}
-
 const ts = (value) => JSON.stringify(value)
 
 async function main() {
   console.log('· 자료 내려받는 중…')
-  const [appleHtml, genericHtml, catalogBuf, curatedRaw] = await Promise.all([
+  const [appleHtml, catalogBuf, curatedRaw, genericRaw] = await Promise.all([
     get(SOURCES.apple),
-    get(SOURCES.generic),
     get(SOURCES.playCatalog, true),
     readFile(CURATED, 'utf8'),
+    readFile(GENERIC, 'utf8'),
   ])
 
   const apple = mergeSameScreens(parseApple(appleHtml)).sort((a, b) => a.name.localeCompare(b.name))
-  const generic = dedupe(parseGeneric(genericHtml)).sort(
+  const generic = JSON.parse(genericRaw).sort(
     (a, b) => a.kind.localeCompare(b.kind) || a.name.localeCompare(b.name),
   )
   const catalog = parsePlayCatalog(catalogBuf)
@@ -200,7 +156,6 @@ async function main() {
   // 출처가 HTML 스크래핑이라, 사이트 구조가 바뀌면 조용히 빈 표가 만들어질 수 있다
   const enough = [
     ['Apple 기기', apple.length, 20],
-    ['기타 기기', generic.length, 100],
     ['모델 코드', Object.keys(modelIndex).length, 100],
   ].filter(([, got, least]) => got < least)
   if (enough.length) {
@@ -209,13 +164,23 @@ async function main() {
         enough.map(([what, got, least]) => `${what} ${got}개 < ${least}개`).join(', '),
     )
   }
+  // 열이 밀리면 개수는 그대로인 채 해상도가 PPI 자리에 들어가므로 값 범위도 본다
+  const odd = [...apple, ...generic, ...curated].filter(
+    (d) => !(d.ppi >= 60 && d.ppi <= 1000) || (d.dpr !== undefined && !(d.dpr >= 1 && d.dpr <= 5)),
+  )
+  if (odd.length) {
+    throw new Error(
+      `값이 이상한 기기가 있습니다(출처 구조가 바뀌었을 수 있음): ` +
+        odd.slice(0, 5).map((d) => `${d.name} ppi=${d.ppi} dpr=${d.dpr}`).join(', '),
+    )
+  }
 
   const today = new Date().toISOString().slice(0, 10)
   const body = `// 이 파일은 \`pnpm devices:update\`가 만듭니다. 직접 고치지 마세요.
 // 수집일: ${today}
 // 출처:
 //   - ${SOURCES.apple} (Apple 논리·물리 해상도와 PPI)
-//   - ${SOURCES.generic} (제조사 무관 화면 크기와 PPI)
+//   - scripts/generic-devices.json (제조사 무관 화면 크기와 PPI, screensiz.es 자료를 옮겨 직접 관리)
 //   - ${SOURCES.playCatalog} (안드로이드 모델 코드 ↔ 제품명)
 //   - scripts/curated-devices.json (최신 안드로이드 기기 PPI, 직접 관리)
 

@@ -1,8 +1,8 @@
 // 이 파일은 `pnpm devices:update`가 만듭니다. 직접 고치지 마세요.
-// 수집일: 2026-08-23
+// 수집일: 2026-10-04
 // 출처:
 //   - https://www.ios-resolution.com/ (Apple 논리·물리 해상도와 PPI)
-//   - https://screensiz.es/ (제조사 무관 화면 크기와 PPI)
+//   - scripts/generic-devices.json (제조사 무관 화면 크기와 PPI, screensiz.es 자료를 옮겨 직접 관리)
 //   - https://storage.googleapis.com/play_public/supported_devices.csv (안드로이드 모델 코드 ↔ 제품명)
 //   - scripts/curated-devices.json (최신 안드로이드 기기 PPI, 직접 관리)
 
@@ -18,7 +18,7 @@ export type DeviceRow = {
   platform?: 'ios' | 'ipad'
 }
 
-export const DEVICE_DB_DATE = '2026-08-23'
+export const DEVICE_DB_DATE = '2026-10-04'
 
 export const APPLE_DEVICES: DeviceRow[] = [
   { name: "iPad 2 · iPad 1st gen", ppi: 132, kind: 'tablet', css: [768, 1024], dpr: 1, platform: 'ipad' },
@@ -40,12 +40,14 @@ export const APPLE_DEVICES: DeviceRow[] = [
   { name: "iPhone 14 Plus · iPhone 13 Pro Max · iPhone 12 Pro Max", ppi: 458, kind: 'phone', css: [428, 926], dpr: 3, platform: 'ios' },
   { name: "iPhone 16 · iPhone 15 Pro · iPhone 15 등", ppi: 460, kind: 'phone', css: [393, 852], dpr: 3, platform: 'ios' },
   { name: "iPhone 16 Plus · iPhone 15 Pro Max · iPhone 15 Plus 등", ppi: 460, kind: 'phone', css: [430, 932], dpr: 3, platform: 'ios' },
-  { name: "iPhone 17 Pro · iPhone 17 · iPhone 16 Pro", ppi: 460, kind: 'phone', css: [402, 874], dpr: 3, platform: 'ios' },
-  { name: "iPhone 17 Pro Max · iPhone 16 Pro Max", ppi: 460, kind: 'phone', css: [440, 956], dpr: 3, platform: 'ios' },
   { name: "iPhone 17e · iPhone 16e · iPhone 14 등", ppi: 460, kind: 'phone', css: [390, 844], dpr: 3, platform: 'ios' },
+  { name: "iPhone 18 Pro · iPhone 17 Pro · iPhone 17 등", ppi: 460, kind: 'phone', css: [402, 874], dpr: 3, platform: 'ios' },
+  { name: "iPhone 18 Pro Max · iPhone 17 Pro Max · iPhone 16 Pro Max", ppi: 460, kind: 'phone', css: [440, 956], dpr: 3, platform: 'ios' },
   { name: "iPhone 4S · iPod touch 4th gen · iPhone 4", ppi: 326, kind: 'phone', css: [320, 480], dpr: 2, platform: 'ios' },
   { name: "iPhone 8 Plus · iPhone 7 Plus · iPhone 6s Plus 등", ppi: 401, kind: 'phone', css: [414, 736], dpr: 3, platform: 'ios' },
   { name: "iPhone Air", ppi: 460, kind: 'phone', css: [420, 912], dpr: 3, platform: 'ios' },
+  { name: "iPhone Duo (Inner)", ppi: 430, kind: 'phone', css: [626, 890], dpr: 3, platform: 'ios' },
+  { name: "iPhone Duo (Outer)", ppi: 460, kind: 'phone', css: [466, 678], dpr: 3, platform: 'ios' },
   { name: "iPhone SE 3rd gen · iPhone SE 2nd gen · iPhone 8 등", ppi: 326, kind: 'phone', css: [375, 667], dpr: 2, platform: 'ios' },
   { name: "iPod touch 3rd gen · iPhone 3GS · iPod touch 2nd gen 등", ppi: 163, kind: 'phone', css: [320, 480], dpr: 1, platform: 'ios' },
   { name: "iPod touch 7th gen · iPhone SE 1st gen · iPod touch 6th gen 등", ppi: 326, kind: 'phone', css: [320, 568], dpr: 2, platform: 'ios' },
